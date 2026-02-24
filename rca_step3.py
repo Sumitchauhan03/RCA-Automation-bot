@@ -199,16 +199,24 @@ def analyze_hubs_services(
 
 def format_services_output(services: list[tuple[str, float]]) -> str:
     """
-    Format list of (label, rl_sum) into string like:
-      "Pedi : CrystalRosePedicure Pedi : heel_peel Waxing : RicaWhiteChocolateWax"
+    Format list of (label, rl_sum) into a newline-separated string.
+
+    Output example:
+      Pedi : CrystalRosePedicure (0.676%)
+      Waxing : RicaWhiteChocolateWax (0.231%)
     """
     if not services:
         return "No service tags found"
 
-    # One label per line for readability / copy-paste
+    def _fmt_rl(x: float) -> str:
+        # Keep small values readable (e.g., 0.676) without forcing extra zeros
+        s = f"{x:.3f}".rstrip("0").rstrip(".")
+        return s if s else "0"
+
+    # One tag per line for readability / copy-paste
     lines: list[str] = []
-    for label, _ in services:
-        lines.append(label)
+    for label, rl_sum in services:
+        lines.append(f"{label} ({_fmt_rl(rl_sum)}%)")
     return "\n".join(lines)
 
 
