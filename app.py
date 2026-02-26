@@ -277,24 +277,33 @@ with col2:
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🎯 Navigation")
 
-# Step selector with icons
-step = st.sidebar.radio(
-    "Select Analysis Step",
-    [
-        "Step 1: Hub-wise RCA",
-        "Step 2: Sub-reasons Analysis",
-        "Step 3: Service Tags Analysis",
-        "Step 4: Summary / Bucketization",
-    ],
+# Mode selector: step-wise vs one-shot
+mode = st.sidebar.radio(
+    "RCA mode",
+    ["Step-wise (per step)", "One-shot RCA (all steps together)"],
     index=0,
-    help="Choose which RCA analysis step to perform",
-    label_visibility="collapsed",
 )
+
+# Step selector with icons (used only in step-wise mode)
+step = None
+if mode == "Step-wise (per step)":
+    step = st.sidebar.radio(
+        "Select Analysis Step",
+        [
+            "Step 1: Hub-wise RCA",
+            "Step 2: Sub-reasons Analysis",
+            "Step 3: Service Tags Analysis",
+            "Step 4: Summary / Bucketization",
+        ],
+        index=0,
+        help="Choose which RCA analysis step to perform",
+        label_visibility="collapsed",
+    )
 
 st.sidebar.markdown("---")
 
 # --- STEP 1 UI ---
-if step == "Step 1: Hub-wise RCA":
+if mode == "Step-wise (per step)" and step == "Step 1: Hub-wise RCA":
     st.markdown("### 🔍 Step 1: Hub-wise Root Cause Analysis")
     st.caption("Identify top 2 drivers per hub with rounded RL%")
     st.markdown("---")
@@ -421,7 +430,7 @@ if step == "Step 1: Hub-wise RCA":
                 """)
 
 #! --- STEP 2 UI ---
-elif step == "Step 2: Sub-reasons Analysis":
+elif mode == "Step-wise (per step)" and step == "Step 2: Sub-reasons Analysis":
     st.caption("Sub-reasons Analysis for Pro Discarded — find dominating sub-reasons for given hub(s)")
     
     st.sidebar.header("Input data")
@@ -668,7 +677,7 @@ elif step == "Step 2: Sub-reasons Analysis":
                 """)
 
 # --- STEP 3 UI ---
-elif step == "Step 3: Service Tags Analysis":
+elif mode == "Step-wise (per step)" and step == "Step 3: Service Tags Analysis":
     st.markdown("### 🏷️ Step 3: Service Tags Analysis")
     st.caption("Find dominant services causing RL for given hub(s)")
     st.markdown("---")
@@ -877,7 +886,7 @@ elif step == "Step 3: Service Tags Analysis":
                 """)
 
 # --- STEP 4 UI ---
-elif step == "Step 4: Summary / Bucketization":
+elif mode == "Step-wise (per step)" and step == "Step 4: Summary / Bucketization":
     st.markdown("### 📋 Step 4: Summary / Bucketization")
     st.caption("Categorize RCA statements into predefined buckets")
     st.markdown("---")
@@ -1006,3 +1015,326 @@ elif step == "Step 4: Summary / Bucketization":
             - Supply shortage + Activity
             - Supply shortage + Pro discarded
             """)
+
+# --- ONE-SHOT RCA UI ---
+elif mode == "One-shot RCA (all steps together)":
+    st.markdown("### 🧮 One-shot RCA (All Steps Together)")
+    st.caption("Provide all datasets once, then analyze hubs to get combined RCA, SKU tags, and summary bucket.")
+    st.markdown("---")
+
+    # Sidebar inputs for three datasets (CSV upload or pasted raw data)
+    st.sidebar.markdown("### 📥 Data Input (One-shot)")
+    st.sidebar.caption("For each step, either upload a CSV file or paste raw tab/comma-separated data.")
+
+    # --- Step 1 data source ---
+    data_src_1 = st.sidebar.radio(
+        "Step 1 dataset source",
+        ["Upload CSV", "Paste data"],
+        key="oneshot_src1",
+    )
+    uploaded_step1 = None
+    pasted_step1 = None
+    if data_src_1 == "Upload CSV":
+        uploaded_step1 = st.sidebar.file_uploader(
+            "Step 1 dataset: hub-wise RL% + 3 driver columns",
+            type=["csv"],
+            key="oneshot_step1",
+        )
+    else:
+        pasted_step1 = st.sidebar.text_area(
+            "Step 1 pasted data",
+            height=140,
+            key="oneshot_paste1",
+            placeholder="hub_name_2\tPro Discarded\tSupply Shortage (Leave)\tsupply_shortage\nhub1\t1.6\t1.3\t6.7\n...",
+        )
+
+    # --- Step 2 data source ---
+    data_src_2 = st.sidebar.radio(
+        "Step 2 dataset source",
+        ["Upload CSV", "Paste data"],
+        key="oneshot_src2",
+    )
+    uploaded_step2 = None
+    pasted_step2 = None
+    if data_src_2 == "Upload CSV":
+        uploaded_step2 = st.sidebar.file_uploader(
+            "Step 2 dataset: Pro Discarded sub-reasons (long or wide)",
+            type=["csv"],
+            key="oneshot_step2",
+        )
+    else:
+        pasted_step2 = st.sidebar.text_area(
+            "Step 2 pasted data",
+            height=140,
+            key="oneshot_paste2",
+            placeholder="hub_name\tsub_reason\tRL_ABSOLUTE\nhub1\thasAllRequestSkillsV2\t67.9\n...",
+        )
+
+    # --- Step 3 data source ---
+    data_src_3 = st.sidebar.radio(
+        "Step 3 dataset source",
+        ["Upload CSV", "Paste data"],
+        key="oneshot_src3",
+    )
+    uploaded_step3 = None
+    pasted_step3 = None
+    if data_src_3 == "Upload CSV":
+        uploaded_step3 = st.sidebar.file_uploader(
+            "Step 3 dataset: Service tags with RL (long format)",
+            type=["csv"],
+            key="oneshot_step3",
+        )
+    else:
+        pasted_step3 = st.sidebar.text_area(
+            "Step 3 pasted data",
+            height=140,
+            key="oneshot_paste3",
+            placeholder="Hub Name\tCategory\tTags\tRL\nhub1\tSalon Prime\tpedicure::gender:female::product_used_skill_ind:CrystalRosePedicure\t0.676\n...",
+        )
+
+    # Build dataframes from either uploads or pasted text
+    if uploaded_step1 is not None:
+        df1 = _normalize_columns(get_df_from_upload(uploaded_step1))
+    elif pasted_step1 and pasted_step1.strip():
+        df1 = _normalize_columns(get_df_from_paste(pasted_step1))
+    else:
+        df1 = None
+
+    if uploaded_step2 is not None:
+        df2 = _normalize_columns(get_df_from_upload(uploaded_step2))
+    elif pasted_step2 and pasted_step2.strip():
+        df2 = _normalize_columns(get_df_from_paste(pasted_step2))
+    else:
+        df2 = None
+
+    if uploaded_step3 is not None:
+        df3 = _normalize_columns(get_df_from_upload(uploaded_step3))
+    elif pasted_step3 and pasted_step3.strip():
+        df3 = _normalize_columns(get_df_from_paste(pasted_step3))
+    else:
+        df3 = None
+
+    # Hub selection (same pattern as Steps 2 and 3)
+    st.markdown("### 📝 Enter Hub Name(s)")
+    st.caption("Enter hub names separated by commas OR paste a column (one hub per line).")
+
+    hub_input_mode_oneshot = st.radio(
+        "Input format (One-shot)",
+        ["Single/Comma-separated", "Paste column (one per line)"],
+        horizontal=True,
+    )
+
+    if hub_input_mode_oneshot == "Single/Comma-separated":
+        hubs_input_text = st.text_input(
+            "Hub name(s)",
+            placeholder="hub1, hub2, hub3",
+        )
+        if hubs_input_text:
+            hub_names_oneshot = [h.strip() for h in hubs_input_text.split(",") if h.strip()]
+        else:
+            hub_names_oneshot = []
+    else:
+        hubs_input_text = st.text_area(
+            "Paste hub names (one per line)",
+            placeholder="hub1\nhub2\nhub3",
+            height=160,
+        )
+        if hubs_input_text:
+            hub_names_oneshot = [h.strip() for h in hubs_input_text.split("\n") if h.strip()]
+        else:
+            hub_names_oneshot = []
+
+    # Settings for Step 2 / Step 3 analyses
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### ⚙️ Analysis Settings (One-shot)")
+
+    min_weightage_step2 = st.sidebar.slider(
+        "Step 2: Minimum weightage % (sub-reasons)",
+        min_value=0.0,
+        max_value=50.0,
+        value=5.0,
+        step=0.5,
+    )
+    dominance_ratio_step2 = st.sidebar.slider(
+        "Step 2: Dominance ratio",
+        min_value=1.0,
+        max_value=3.0,
+        value=1.5,
+        step=0.1,
+    )
+
+    min_rl_step3 = st.sidebar.slider(
+        "Step 3: Minimum RL (service tags) for display",
+        min_value=0.0,
+        max_value=10.0,
+        value=0.0,
+        step=0.1,
+    )
+    dominance_ratio_step3 = st.sidebar.slider(
+        "Step 3: Dominance ratio (service tags)",
+        min_value=1.0,
+        max_value=3.0,
+        value=1.5,
+        step=0.1,
+    )
+
+    threshold_ratio_step4 = st.sidebar.slider(
+        "Step 4: Threshold ratio for ignoring smaller reasons",
+        min_value=0.0,
+        max_value=1.0,
+        value=0.5,
+        step=0.1,
+    )
+
+    st.markdown("---")
+
+    analyze_oneshot_clicked = st.button("🚀 Analyze One-shot RCA", type="primary", use_container_width=True)
+
+    if analyze_oneshot_clicked:
+        # Basic validation
+        if df1 is None or df2 is None or df3 is None:
+            st.error("Please provide all three datasets (Step 1, Step 2, and Step 3) before running one-shot RCA.")
+        elif not hub_names_oneshot:
+            st.error("Please provide at least one hub name.")
+        else:
+            try:
+                # --- Step 1: compute RCA per hub ---
+                cols1 = list(df1.columns)
+                hub_col1 = cols1[0]
+                driver_cols1 = cols1[1:4] if len(cols1) >= 4 else cols1[1:]
+
+                df1_with_rca = add_rca_column(df1, hub_col1, driver_cols1, None)
+
+                # Build mapping from hub -> RCA string (step 1)
+                rca_map_step1: dict[str, str] = {}
+                for _, row in df1_with_rca.iterrows():
+                    hub_val = str(row[hub_col1]).strip()
+                    rca_map_step1[hub_val] = str(row.get("RCA", ""))
+
+                # --- Step 2: sub-reasons for Pro Discarded ---
+                from rca_step2 import analyze_hubs as analyze_hubs_step2
+
+                sub_reason_results = analyze_hubs_step2(
+                    df2,
+                    hub_names_oneshot,
+                    hub_column=df2.columns[0],
+                    sub_reason_column=None,
+                    weightage_column=None,
+                    min_weightage_threshold=min_weightage_step2,
+                    dominance_ratio=dominance_ratio_step2,
+                    show_all=False,
+                )
+
+                # --- Step 3: service tags per hub ---
+                # Detect appropriate columns for hub, tags, RL to handle different headers
+                cols3 = list(df3.columns)
+                colmap3 = {str(c).strip().lower(): c for c in cols3}
+
+                # Hub column: try common names, fallback to first column
+                if "hub name" in colmap3:
+                    hub_col3 = colmap3["hub name"]
+                elif "hubs" in colmap3:
+                    hub_col3 = colmap3["hubs"]
+                elif "hub" in colmap3:
+                    hub_col3 = colmap3["hub"]
+                else:
+                    hub_col3 = cols3[0]
+
+                # Tags column: prefer 'tags' / 'tag', fallback to second column if exists
+                if "tags" in colmap3:
+                    tags_col3 = colmap3["tags"]
+                elif "tag" in colmap3:
+                    tags_col3 = colmap3["tag"]
+                else:
+                    tags_col3 = cols3[1] if len(cols3) > 1 else cols3[0]
+
+                # RL column: look for common RL/weightage names, fallback to last column
+                rl_col3 = None
+                for cand in ["rl", "rl_absolute", "weightage", "value", "percentage"]:
+                    if cand in colmap3:
+                        rl_col3 = colmap3[cand]
+                        break
+                if rl_col3 is None:
+                    rl_col3 = cols3[-1]
+
+                services_results = analyze_hubs_services(
+                    df3,
+                    hub_names_oneshot,
+                    hub_column=hub_col3,
+                    tags_column=tags_col3,
+                    rl_column=rl_col3,
+                    min_rl_threshold=min_rl_step3,
+                    dominance_ratio=dominance_ratio_step3,
+                    show_all=False,
+                )
+
+                # --- Combine into final one-shot output ---
+                def _format_sub_reason_list(reasons: list[tuple[str, float]]) -> str:
+                    if not reasons:
+                        return ""
+                    names = [r for r, _ in reasons]
+                    if len(names) == 1:
+                        return names[0]
+                    if len(names) == 2:
+                        return f"{names[0]} & {names[1]}"
+                    return ", ".join(names[:-1]) + f" & {names[-1]}"
+
+                def _inject_pro_discarded_details(rca_text: str, reasons: list[tuple[str, float]]) -> str:
+                    base = rca_text or ""
+                    details = _format_sub_reason_list(reasons)
+                    if not base or not details:
+                        return base
+                    # Insert details right after the first occurrence of 'pro discarded'
+                    if "pro discarded" in base:
+                        base = base.replace("pro discarded", f"pro discarded ({details})", 1)
+                    # For one-shot view, show 'activity' instead of full 'supply shortage leave (activity)'
+                    base = base.replace("supply shortage leave (activity)", "activity")
+                    return base
+
+                from rca_step4 import bucketize_statement
+
+                rows = []
+                for hub in hub_names_oneshot:
+                    hub_key = str(hub).strip()
+                    base_rca = rca_map_step1.get(hub_key, "")
+                    sub_reasons = sub_reason_results.get(hub_key, [])
+                    services = services_results.get(hub_key, [])
+
+                    # Column 1: RL RCA (Step 1 + Step 2 details)
+                    rca_with_details = _inject_pro_discarded_details(base_rca, sub_reasons)
+
+                    # Column 2: SKU (Step 3 formatted services)
+                    sku_text = format_services_output(services)
+
+                    # Column 3: Summary (Step 4 bucket, based on Step 1 RCA only)
+                    summary_bucket = bucketize_statement(base_rca, threshold_ratio_step4) if base_rca else ""
+
+                    rows.append(
+                        {
+                            "Hub Name": hub_key,
+                            "RL RCA": rca_with_details,
+                            "SKU": sku_text,
+                            "Summary": summary_bucket,
+                        }
+                    )
+
+                if not rows:
+                    st.warning("No results generated for the provided hub(s). Please check that hub names match the Step 1 / Step 2 / Step 3 datasets.")
+                else:
+                    result_df = pd.DataFrame(rows)
+                    st.success(f"✅ One-shot RCA generated for {len(result_df)} hub(s).")
+                    st.dataframe(result_df, use_container_width=True, hide_index=True)
+
+                    # Download combined result
+                    csv_bytes = result_df.to_csv(index=False).encode("utf-8")
+                    st.download_button(
+                        label="Download One-shot RCA results as CSV",
+                        data=csv_bytes,
+                        file_name="rca_oneshot_results.csv",
+                        mime="text/csv",
+                    )
+
+            except Exception as e:
+                st.error(f"Error running one-shot RCA: {e}")
+                import traceback
+                st.code(traceback.format_exc())
